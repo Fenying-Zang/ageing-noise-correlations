@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# Data and outputs
+data/raw/
+data/interim/
+data/processed/
+results/
+figures/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Large binary files
+*.npy
+*.npz
+*.pkl
+*.parquet
+*.h5
+*.hdf5
