@@ -34,3 +34,6 @@ figures/
 # Track all figure files
 !figures/
 !figures/**
+
+# Final merged pair table
+!data/noise_pair_corr_merged_prepost_500ms.parquet
