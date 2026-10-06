@@ -1,6 +1,6 @@
 
 """
-I/O utility functions for reading/writing tables, saving figures, 
+I/O utility functions for reading/writing tables, saving figures,
 and configuring logging.
 
 Functions
@@ -8,7 +8,6 @@ Functions
 - read_table      : Load CSV/Parquet into DataFrame.
 - setup_logging   : Configure root logger for consistent console output.
 - save_figure     : Save Matplotlib figures with timestamp/transparent options.
-- get_suffix      : Return suffix string based on mean_subtraction flag.
 """
 from pathlib import Path
 import pandas as pd
@@ -45,18 +44,6 @@ def read_table(path, *, engine=None):
 
     raise ValueError(f"Unsupported file extension for {p.name}")
 
-# def save_figure(fig: plt.Figure, path: Path, *, dpi: int = 500, transparent: bool = False) -> None:
-#     """
-#     Save a Matplotlib figure to the given path.
-#     - fig: Matplotlib Figure object
-#     - path: Path to file (absolute or relative)
-#     - dpi: resolution (default 500)
-#     - transparent: whether background is transparent
-#     """
-#     p = Path(path)
-#     p.parent.mkdir(parents=True, exist_ok=True)
-#     fig.savefig(p, dpi=dpi, transparent=transparent, bbox_inches="tight")
-#     print(f"[Saved figure] {p.resolve()}")
 
 def setup_logging(level=logging.INFO):
     """
@@ -70,7 +57,7 @@ def setup_logging(level=logging.INFO):
     -----
     - Idempotent: running multiple times won't duplicate handlers.
     - Call this once at the top of a script (before other loggers).
-    
+
     Parameters
     ----------
     level : int
@@ -78,11 +65,11 @@ def setup_logging(level=logging.INFO):
 
     Returns
     -------
-    logging.Logger: 
+    logging.Logger:
         Configured root logger.
     """
     root = logging.getLogger()
-    
+
     if getattr(root, "_configured_by_setup_logging", False):
         return root
 
@@ -98,7 +85,7 @@ def setup_logging(level=logging.INFO):
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logging.getLogger("seaborn").setLevel(logging.WARNING)
     logging.getLogger("fontTools").setLevel(logging.WARNING)
-    logging.getLogger("fontTools.subset").setLevel(logging.WARNING) 
+    logging.getLogger("fontTools.subset").setLevel(logging.WARNING)
 
     root._configured_by_setup_logging = True
     return root
@@ -129,7 +116,7 @@ def save_figure(fig, path, *, dpi=500,
     """
     p = Path(path)
     log = logging.getLogger(__name__)
-    setup_logging()  
+    setup_logging()
 
     if add_timestamp:
         stem, suffix = p.stem, p.suffix or ".png"
@@ -146,19 +133,3 @@ def save_figure(fig, path, *, dpi=500,
         log.info(msg)
     else:
         print(msg)
-
-
-def get_suffix(mean_subtraction):
-    """
-    Return suffix string for filenames.
-
-    Parameters
-    ----------
-    mean_subtraction : bool
-
-    Returns
-    -------
-    str
-        'meansub' if True, else ''.
-    """
-    return 'meansub' if mean_subtraction else ''

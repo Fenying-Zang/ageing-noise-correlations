@@ -1,9 +1,7 @@
 # Ageing noise correlations
 
-This repository contains the analysis code for the noise correlation paper:
-*Age-related changes in noise correlations in a decision-making task*
-
-The analysis builds on [Fano factor analysis](https://github.com/Fenying-Zang/Ageing_behavioral_and_neural_variability), but is organized as a separate repository to keep the noise correlation pipeline self-contained and reproducible.
+This repository contains the analysis code for the preprint:
+[Age-related changes in noise correlations in a decision-making task](https://www.biorxiv.org/content/10.64898/2026.06.27.734969v2.abstract)
 
 Fenying Zang, Leiden University, 2026, f.zang@fsw.leidenuniv.nl
 

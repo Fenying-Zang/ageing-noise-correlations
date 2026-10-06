@@ -75,8 +75,7 @@ PIDS_WITHOUT_ILBLSORTOR = ['57edc590-a53d-403c-9aab-d58ee51b6a24', 'daadb3f1-bef
 # Noise correlation config
 # NC_MODE = "pooled_zscore"   # "by_condition_avg" (paper-aligned) or "pooled_zscore"
 NC_MODE = "pooled_zscore"   # main analysis: within-condition z-score, then pooled Pearson r
-
-
+RANDOM_FACTOR = "session_eid" # random effects used in the linear mixed model (LMM)
 NC_MIN_TRIALS_PER_COND = 10
 NC_MIN_TRIALS_TOTAL = 50
 NC_OUTLIER_SD = None#3.0            # None to disable outlier trial removal

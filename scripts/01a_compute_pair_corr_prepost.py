@@ -1,7 +1,5 @@
-
 """
 Script to calculate pairwise noise and signal correlations for neurons.
-
 """
 #%%
 import config as C

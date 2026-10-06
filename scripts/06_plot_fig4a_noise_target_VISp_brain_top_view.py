@@ -1,6 +1,5 @@
 """ 
-for reproduing Liu et al., 2025
-here we overlay VISp + their target on the top view of mouse brain
+Figure 4a: Top view of mouse brain with VISp and Liu et al. target locations
 
 """
 #%%
@@ -58,6 +57,3 @@ ax.spines['right'].set_visible(False)
 plt.tight_layout()
 plt.show()
 fig.savefig(C.FIGPATH / "VISp_top_view_with_Liu_targets.pdf", dpi=300)
-
-
-# %%

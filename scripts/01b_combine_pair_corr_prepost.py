@@ -1,3 +1,8 @@
+"""
+Script to combine pairwise correlation results (noise and signal) across all sessions for pre/post windows.
+Saves combined tables to DATAPATH.
+
+"""
 #%%
 from glob import glob
 from pathlib import Path
@@ -7,7 +12,7 @@ from scripts.utils.io import read_table
 from scripts.utils.noise_corr_utils import combine_corr_results
 
 # Select the window configuration: C.NC_WINDOWS_500 or C.NC_WINDOWS_1000
-NC_WINDOWS = C.NC_WINDOWS_1000
+NC_WINDOWS = C.NC_WINDOWS_500
 RUN_TAG = NC_WINDOWS["pre"]["subfoldername"].removeprefix("pair_corr_pre_")
 
 def combine_pair_tables(kind, subfoldername):
@@ -141,7 +146,7 @@ def main():
 
     if coverage_records:
         coverage_summary = pd.DataFrame(coverage_records)
-        out_coverage = C.DATAPATH / f"proj2_noise_pair_corr_file_coverage_prepost_{RUN_TAG}.csv"
+        out_coverage = C.DATAPATH / f"noise_pair_corr_file_coverage_prepost_{RUN_TAG}.csv"
 
 
         coverage_summary.to_csv(out_coverage, index=False)
@@ -149,7 +154,7 @@ def main():
 
     if merged_tables:
         merged_prepost = pd.concat(merged_tables, ignore_index=True)
-        out_prepost = C.DATAPATH / f"proj2_noise_pair_corr_merged_prepost_{RUN_TAG}.parquet"
+        out_prepost = C.DATAPATH / f"noise_pair_corr_merged_prepost_{RUN_TAG}.parquet"
         merged_prepost.to_parquet(out_prepost, index=False)
 
         print(f"[Saved prepost merged] {out_prepost}")
