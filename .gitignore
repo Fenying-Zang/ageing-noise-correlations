@@ -31,3 +31,6 @@ figures/
 *.parquet
 *.h5
 *.hdf5
+# Track all figure files
+!figures/
+!figures/**
