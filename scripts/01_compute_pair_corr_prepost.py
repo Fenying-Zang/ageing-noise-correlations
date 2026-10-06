@@ -1,27 +1,21 @@
 
-""""
+"""
 Script to calculate pairwise noise and signal correlations for neurons.
 
 """
 #%%
 import config as C
-import logging
 import traceback
 import os
 import pandas as pd
 import numpy as np
-from pathlib import Path
 from one.api import ONE
-from iblatlas.atlas import AllenAtlas
 from brainbox.io.one import SpikeSortingLoader
-from iblutil.numerical import ismember
 from iblatlas.regions import BrainRegions
-from scripts.utils.neuron_utils import cal_presence_ratio, combine_regions, smoothing_sliding
+from scripts.utils.neuron_utils import cal_presence_ratio, combine_regions_visp_seperate
 from scripts.utils.behavior_utils import clean_rts
-from glob import glob
 import logging
 from scripts.utils.io import read_table
-import pingouin as pg
 from scripts.utils.noise_corr_utils import (
     compute_noise_corr_by_condition_average,
     compute_noise_corr_pooled_withincond_zscore,
@@ -29,6 +23,9 @@ from scripts.utils.noise_corr_utils import (
 )
 import gc
 log = logging.getLogger(__name__)
+
+# Select the window configuration: C.NC_WINDOWS_500 or C.NC_WINDOWS_1000
+NC_WINDOWS = C.NC_WINDOWS_1000
 
 def clean_rt_table(trials_table, rt_variable):
     
@@ -84,23 +81,6 @@ def load_and_prepare_trials(trial_type, event_list, clean_rt, rt_variable_name):
     return trials_table
 
 
-def filter_spikes_by_cluster(spikes, clusters_ids, pid, pid_no_spikes):
-    """
-    Filters spikes based on selected cluster IDs.
-
-    Returns:
-        spike_idx: boolean mask
-        has_valid_spikes: bool
-        updated pid_no_spikes (optional)
-    """
-    spike_idx = np.isin(spikes['clusters'], clusters_ids)
-    if np.sum(spike_idx) == 0:
-        print(f"{pid} — No spikes in selected C.ROIS.")
-        pid_no_spikes.append(pid)
-        return spike_idx, False, pid_no_spikes
-    return spike_idx, True, pid_no_spikes
-
-
 def load_sorting_and_clusters(row, one, no_iblsortor):
     """
     Load spikes, clusters, and channels for a given row.
@@ -148,7 +128,7 @@ def compute_cluster_metrics(spikes, clusters, trials, br, hist_win=10):
     clusters['firing_rate_poi'] = fr_poi
 
     clusters['Beryl'] = br.id2acronym(clusters['atlas_id'], mapping='Beryl')
-    clusters['Beryl_merge'] = combine_regions(clusters['Beryl'])
+    clusters['Beryl_merge'] = combine_regions_visp_seperate(clusters['Beryl'])
 
     return clusters, spike_times_btw, spike_clusters
 
@@ -165,7 +145,7 @@ def compute_neural_yield(clusters, channels, ROIs, firing_rate_threshold, presen
     """
     # Handle channels
     channels['Beryl'] = br.id2acronym(channels['atlas_id'], mapping='Beryl')
-    channels['Beryl_merge'] = combine_regions(channels['Beryl'])
+    channels['Beryl_merge'] = combine_regions_visp_seperate(channels['Beryl'])
 
     try:
         channels_df = pd.DataFrame.from_dict(channels)
@@ -214,82 +194,10 @@ def compute_neural_yield(clusters, channels, ROIs, firing_rate_threshold, presen
     return yield_table, clusters_ids, cluster_good, cluster_idx
 
 
-def compute_noise_corr_trialwise_direct(
-    spikes_times, spikes_clusters, cluster_ids_in_region,
-    trial_onsets, t0, t1,
-    subtract_condition_mean=True,
-    min_trials=25,
-):
-    """
-    Classic noise correlation (trial-to-trial).
-
-    Count spikes for each trial x neuron within the window [onset + t0, onset + t1],
-    forming a matrix `counts` with shape (n_trials, n_neurons). Compute pairwise
-    correlations across the trial dimension.
-
-    Parameters
-    ----------
-    spikes_times : 1D np.ndarray
-        Spike timestamps in seconds.
-    spikes_clusters : 1D np.ndarray
-        Cluster ID for each spike; same length as spikes_times.
-    cluster_ids_in_region : Iterable
-        Iterable of cluster IDs (the good units within this region).
-    trial_onsets : 1D np.ndarray
-        Alignment event timestamps (one per trial).
-    t0, t1 : float
-        Window edges relative to the alignment event in seconds, e.g., (0, 0.25).
-    subtract_condition_mean : bool
-        If True, subtract the across-trial mean from each neuron before computing correlations.
-    min_trials : int
-        Minimum number of trials required to compute correlations.
-
-    Returns
-    -------
-    corr_df : pandas.DataFrame
-        DataFrame with columns: ['cluster_id1', 'cluster_id2', 'r', 'n_trials'].
-    """
-    cluster_ids = np.asarray(list(cluster_ids_in_region))
-    n_trials = len(trial_onsets)
-    if n_trials < min_trials or cluster_ids.size < 2:
-        return pd.DataFrame()
-
-    # trial window to be used
-    win_starts = np.asarray(trial_onsets) + t0
-    win_ends   = np.asarray(trial_onsets) + t1
-
-    # extract spike times for each neuron
-    counts = np.zeros((n_trials, cluster_ids.size), dtype=float)
-    for j, cid in enumerate(cluster_ids):
-        ts = spikes_times[spikes_clusters == cid]
-        # searchsorted 
-        left_idx  = np.searchsorted(ts, win_starts, side='left')
-        right_idx = np.searchsorted(ts, win_ends,   side='left')
-        counts[:, j] = right_idx - left_idx
-
-    if subtract_condition_mean:
-        counts = counts - counts.mean(axis=0, keepdims=True)
-
-    # trials × neurons → corr over trials
-    R = np.corrcoef(counts, rowvar=False)  # (n_neurons, n_neurons)
-    iu, ju = np.triu_indices(R.shape[0], k=1)
-    r_vals = R[iu, ju]
-
-    corr_df = pd.DataFrame({
-        "cluster_id1": cluster_ids[iu],
-        "cluster_id2": cluster_ids[ju],
-        "r": r_vals,
-        "n_trials": n_trials,
-        "t0": t0,
-        "t1": t1,
-    })
-    return corr_df
-
-
 if __name__ == "__main__":
     
     outdirs = {}
-    for window_name, win_cfg in C.NC_WINDOWS.items():
+    for window_name, win_cfg in NC_WINDOWS.items():
         outdir = C.RESULTSPATH / win_cfg["subfoldername"]
         outdir.mkdir(parents=True, exist_ok=True)
         outdirs[window_name] = outdir
@@ -306,7 +214,6 @@ if __name__ == "__main__":
 
     recordings_filtered = read_table(C.DATAPATH / "BWM_LL_release_afterQC_df.csv")
 
-    ba = AllenAtlas()
     br = BrainRegions()
     one = ONE()
 
@@ -324,7 +231,7 @@ if __name__ == "__main__":
 
         done_files = {
             window_name: outdirs[window_name] / f"{pid}.noise_signal.done"
-            for window_name in C.NC_WINDOWS
+            for window_name in NC_WINDOWS
         }
 
         if all(done_file.exists() for done_file in done_files.values()):
@@ -363,7 +270,7 @@ if __name__ == "__main__":
             yield_table, clusters_ids, cluster_good, cluster_idx = compute_neural_yield(
                 clusters,
                 channels,
-                C.ROIS,#ROI_TEMP, #
+                C.ROIS_vis_seperate,
                 C.FIRING_RATE_THRESHOLD,
                 C.PRESENCE_RATIO_THRESHOLD,
                 pid,
@@ -391,7 +298,7 @@ if __name__ == "__main__":
             all_t0 = []
             all_t1 = []
 
-            for window_cfg in C.NC_WINDOWS.values():
+            for window_cfg in NC_WINDOWS.values():
                 all_t0.append(window_cfg["nc_window"][0])
                 all_t1.append(window_cfg["nc_window"][1])
 
@@ -420,7 +327,7 @@ if __name__ == "__main__":
 
             cond_labels = trials["signed_contrast"].values
 
-            for window_name, window_cfg in C.NC_WINDOWS.items():
+            for window_name, window_cfg in NC_WINDOWS.items():
 
                 outdir = outdirs[window_name]
                 done_file = done_files[window_name]
@@ -606,6 +513,3 @@ if __name__ == "__main__":
             cluster_idx = None
 
             gc.collect()
-
-
-# %%
