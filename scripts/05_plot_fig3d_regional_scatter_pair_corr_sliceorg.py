@@ -1,7 +1,9 @@
+"""
+Figure 3d (also in supplementary figure S4 S5 S6): Slice-organized regional scatter of pairwise noise correlations.
+Each point = one probe-region aggregate (session_pid x cluster_region).
+
+"""
 #%%
-import os
-from glob import glob
-from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,18 +14,19 @@ import config as C
 from scripts.utils.io import read_table, save_figure
 from scripts.utils.plot_utils import (
     figure_style,
-    format_bf_annotation,
     create_slice_org_axes_17panels,
+    format_p_value,
 )
 from scripts.utils.data_utils import add_age_group
-from statsmodels.formula.api import glm
-from statsmodels.genmod.families import Gaussian
 
 FONT = "Arial"
 AX_LABEL_SIZE = 6
 TICK_SIZE = 4
 PANEL_TEXT_SIZE = 5
-ANALYSIS_TAG = "_VISp_VISpm_separate"
+WIN_LEN = 500
+REGIONAL_STATS_FILE = C.RESULTSPATH / f"noise_regional_slopes_BH_FDR_{WIN_LEN}ms_{C.RANDOM_FACTOR}.csv"
+WINDOWS_TO_PLOT = ["pre", "post", "quench"]
+FDR_ALPHA = 0.01
 
 def apply_today_figure_style():
     plt.rcParams.update({
@@ -79,41 +82,27 @@ def style_axis_text(ax):
         ax.spines[spine].set_linewidth(0.4)
 
 
-def fisher_z(r):
-    r = np.clip(r, -0.999999, 0.999999)
-    return np.arctanh(r)
-
-def inv_fisher_z(z):
-    return np.tanh(z)
-
-def zmean(values, weights=None):
-    z = fisher_z(np.asarray(values, dtype=float))
-    if weights is None:
-        return inv_fisher_z(np.nanmean(z))
-    w = np.asarray(weights, dtype=float)
-    return inv_fisher_z(np.nansum(w * z) / np.nansum(w))
-
-
 def standardize_pair_corr_columns(df):
     df = df.copy()
-
-    rename_map = {
+    column_map = {
         "mouse_age_noise": "mouse_age",
-        "mouse_name_noise": "mouse_name",
-        "session_eid_noise": "session_eid",
-        "cluster_geo_mean_fr_noise": "cluster_geo_mean_fr",
-        "pair_distance_noise": "pair_distance",
-        "align_event_noise": "align_event",
+        "session_pid_noise": "session_pid",
+        "cluster_region_noise": "cluster_region",
     }
 
-    rename_map = {k: v for k, v in rename_map.items() if k in df.columns}
-    df = df.rename(columns=rename_map)
+    for old_col, new_col in column_map.items():
+        if old_col not in df.columns:
+            continue
+        if new_col in df.columns:
+            df[new_col] = df[new_col].combine_first(df[old_col])
+        else:
+            df[new_col] = df[old_col]
 
     return df
 
 
 def load_pair_corr_prepost(kind="noise"):
-    path = C.DATAPATH / f"proj2_noise_pair_corr_merged_prepost_500ms{ANALYSIS_TAG}.parquet"
+    path = C.DATAPATH / f"noise_pair_corr_merged_prepost_{WIN_LEN}ms.parquet"
     df = read_table(path)
     df = standardize_pair_corr_columns(df)
 
@@ -161,14 +150,15 @@ def load_pair_corr_for_window_or_quench(kind="noise", window="pre"):
         pre = df[df["window"].astype(str) == "pre"].copy()
         post = df[df["window"].astype(str) == "post"].copy()
 
-        keep_cols = key_cols + [
-            "r_noise",
-            "mouse_age",
-            "age_group",
-            "n_trials",
-            "pair_distance",
-            "cluster_geo_mean_fr",
-        ]
+        # keep_cols = key_cols + [
+        #     "r_noise",
+        #     "mouse_age",
+        #     "age_group",
+        #     "n_trials",
+        #     "pair_distance",
+        #     "cluster_geo_mean_fr",
+        # ]
+        keep_cols = key_cols + ["r_noise", "mouse_age"]
 
         pre = pre[keep_cols].copy()
         post = post[key_cols + ["r_noise"]].copy()
@@ -200,7 +190,6 @@ def pairs_to_probe_region_table(
     value_col="r_noise",
     out_col=None,
     min_pairs=5,
-    weight_by_trials=False,
 ):
     """
     Aggregate pair-level correlations to one value per probe-region entry.
@@ -222,10 +211,7 @@ def pairs_to_probe_region_table(
         if len(g) < min_pairs:
             continue
 
-        if weight_by_trials and "n_trials" in g.columns:
-            r_agg = zmean(g[value_col].values, weights=g["n_trials"].values)
-        else:
-            r_agg = zmean(g[value_col].values)
+        r_agg = np.nanmean(g[value_col].values)
 
         rows.append({
             "session_pid": pid,
@@ -252,111 +238,34 @@ def pairs_to_probe_region_table(
 
 
 def load_regional_stats(analysis_name="pre"):
-    bf_path = C.RESULTSPATH / f"proj2_noise_pairlevel_regional_BFs_pre_post_quench_500ms{ANALYSIS_TAG}.csv"
+    stats = read_table(REGIONAL_STATS_FILE)
+    stats = stats[
+        (stats["analysis"] == analysis_name)
+        & (stats["random_factor"] == C.RANDOM_FACTOR)
+    ].copy()
 
-    permut_files = sorted(
-        glob(str(
-            C.RESULTSPATH
-            / f"proj2_noise_pairlevel_regional_permutation_{analysis_name}_*perms_500ms{ANALYSIS_TAG}.csv"
-        )),
-        key=os.path.getmtime,
-    )
-
-    if not permut_files:
-        raise FileNotFoundError(
-            f"No regional permutation file found for analysis: {analysis_name}"
-        )
-
-    permut_path = Path(permut_files[-1])
-
-    bf_df = read_table(bf_path)
-    permut_df = read_table(permut_path)
-
-    bf_df = bf_df[bf_df["analysis"] == analysis_name].copy()
-
-    print(f"[Loaded regional BF] {bf_path}")
-    print(f"[Loaded regional permutation] {permut_path}")
-
-    return bf_df, permut_df
+    print(f"[Loaded regional LMM slopes] {REGIONAL_STATS_FILE}")
+    return stats
 
 
-def fit_pairlevel_line_for_plot(df_pairs_region, y_col):
-    """
-    Fit the display line from pair-level rows, not from probe-region aggregates.
-
-    Model:
-        y_col ~ age_years + n_trials + pair_distance + cluster_geo_mean_fr
-
-    The displayed line varies age while holding covariates at their regional medians.
-    """
-    required_cols = [
-        "mouse_age",
-        y_col,
-        "n_trials",
-        "pair_distance",
-        "cluster_geo_mean_fr",
-    ]
-
-    missing_cols = [c for c in required_cols if c not in df_pairs_region.columns]
-    if missing_cols:
-        raise ValueError(f"Missing columns for pair-level fitted line: {missing_cols}")
-
-    fit_df = df_pairs_region[required_cols].copy()
-
-    fit_df["age_years"] = fit_df["mouse_age"] / 365.0
-
-    numeric_cols = [
-        y_col,
-        "age_years",
-        "n_trials",
-        "pair_distance",
-        "cluster_geo_mean_fr",
-    ]
-
-    for col in numeric_cols:
-        fit_df[col] = pd.to_numeric(fit_df[col], errors="coerce")
-
-    fit_df = fit_df.dropna(subset=numeric_cols).copy()
-    fit_df = fit_df[np.isfinite(fit_df[numeric_cols]).all(axis=1)].copy()
-
-    if fit_df.empty:
-        return None, None
-
-    formula = (
-        f"{y_col} ~ age_years + n_trials + "
-        "pair_distance + cluster_geo_mean_fr"
-    )
-
-    model = glm(
-        formula=formula,
-        data=fit_df,
-        family=Gaussian(),
-        eval_env=0,
-    ).fit()
-
-    xgrid_years = np.linspace(
-        fit_df["age_years"].min(),
-        fit_df["age_years"].max(),
+def line_from_reported_slope(sub, y_col, beta_age):
+    """Draw the reported LMM slope through the centre of the displayed dots."""
+    xline = np.linspace(
+        sub["mouse_age_months"].min(),
+        sub["mouse_age_months"].max(),
         200,
     )
+    x_centre = sub["mouse_age_months"].mean()
+    y_centre = sub[y_col].mean()
 
-    new = pd.DataFrame({
-        "age_years": xgrid_years,
-        "n_trials": np.nanmedian(fit_df["n_trials"]),
-        "pair_distance": np.nanmedian(fit_df["pair_distance"]),
-        "cluster_geo_mean_fr": np.nanmedian(fit_df["cluster_geo_mean_fr"]),
-    })
-
-    yhat = model.predict(new)
-
-    return xgrid_years * 12.0, yhat
+    age_difference_years = (xline - x_centre) * 30 / 365
+    yline = y_centre + beta_age * age_difference_years
+    return xline, yline
 
 
 def plot_scatter_by_region_simple(
     df_probe_region,
-    df_pairs,
-    permut_df,
-    bf_df,
+    stats_df,
     y_col="r_noise",
     analysis_name="pre",
     granularity="probe_region_agg",
@@ -381,7 +290,6 @@ def plot_scatter_by_region_simple(
     for region in C.ROIS_vis_seperate:
         ax = axs[region]
         sub = df_probe_region[df_probe_region["cluster_region"] == region].copy()
-        sub_pairs = df_pairs[df_pairs["cluster_region"] == region].copy()
 
         if sub.empty:
             continue
@@ -389,16 +297,13 @@ def plot_scatter_by_region_simple(
         sub = sub.dropna(subset=["mouse_age_months", y_col])
         sub = sub.drop_duplicates(subset=["session_pid", "cluster_region"])
 
-        sub_perm = permut_df[permut_df["cluster_region"] == region]
-        sub_bf = bf_df[bf_df["cluster_region"] == region]
+        sub_stats = stats_df[stats_df["cluster_region"] == region]
 
-        if sub_perm.empty or sub_bf.empty:
+        if sub_stats.empty:
             continue
 
-        slope_age = sub_perm["observed_val"].values[0]
-        p_perm = sub_perm["p_perm"].values[0]
-        bf_conclusion = sub_bf["BF10_age_category"].values[0]
-        bf10 = sub_bf["BF10_age"].values[0]
+        beta_age = sub_stats["beta_age"].values[0]
+        p_fdr = sub_stats["p_BH_FDR"].values[0]
 
         if "n_pairs" in sub.columns:
             sizes = np.sqrt(sub["n_pairs"])
@@ -419,27 +324,24 @@ def plot_scatter_by_region_simple(
             alpha=0.8,
         )
 
-        if bf_conclusion in ("strong H1", "moderate H1"):
-            xline, yline = fit_pairlevel_line_for_plot(
-                df_pairs_region=sub_pairs,
+        if p_fdr < FDR_ALPHA:
+            xline, yline = line_from_reported_slope(
+                sub=sub,
                 y_col=y_col,
+                beta_age=beta_age,
+            )
+            ax.plot(
+                xline,
+                yline,
+                color="grey",
+                linewidth=0.8,
             )
 
-            if xline is not None:
-                ax.plot(
-                    xline,
-                    yline,
-                    color="grey",
-                    linewidth=0.8,
-                )
+        p_fdr_text = format_p_value(p_fdr)
 
-        txt = format_bf_annotation(
-            slope_age,
-            p_perm,
-            bf10,
-            bf_conclusion,
-            beta_label="age",
-            big_bf=100,
+        txt = (
+            rf"$\beta_{{\mathrm{{age}}}} = {beta_age:.3f}, "
+            rf"p_{{\mathrm{{fdr}}}}$ {p_fdr_text}"
         )
 
         ax.text(
@@ -468,9 +370,9 @@ def plot_scatter_by_region_simple(
     fig.supxlabel("Age (months)", font="Arial", fontsize=8).set_y(0.35)
 
     if save:
-        fname = (
-            C.FIGPATH
-            / f"proj2_noise_fig04_{analysis_name}_{y_col}_{granularity}_sliceorg{ANALYSIS_TAG}.pdf"
+        fname = C.FIGPATH / (
+            f"noise_fig03d_{analysis_name}_{y_col}_{granularity}_"
+            f"{WIN_LEN}ms_{C.RANDOM_FACTOR}_sliceorg_LMM_BH_FDR.pdf"
         )
         save_figure(fig, fname, add_timestamp=True)
 
@@ -481,7 +383,6 @@ def main_visual_corr_sliceorg(
     kind="noise",
     window="pre",
     min_pairs=5,
-    weight_by_trials=False,
 ):
     """
     Build probe-region aggregates and plot slice-organized regional scatter.
@@ -496,20 +397,17 @@ def main_visual_corr_sliceorg(
         value_col=value_col,
         out_col=out_col,
         min_pairs=min_pairs,
-        weight_by_trials=weight_by_trials,
     )
 
     if probe_region.empty:
         print("No probe-region entries after aggregation.")
         return
 
-    bf_df, permut_df = load_regional_stats(analysis_name=window)
+    stats_df = load_regional_stats(analysis_name=window)
 
     fig, axs = plot_scatter_by_region_simple(
         df_probe_region=probe_region,
-        df_pairs=pairs,
-        permut_df=permut_df,
-        bf_df=bf_df,
+        stats_df=stats_df,
         y_col=out_col,
         analysis_name=window,
         granularity="probe_region_agg",
@@ -528,9 +426,11 @@ if __name__ == "__main__":
     from scripts.utils.io import setup_logging
     setup_logging()
 
-    main_visual_corr_sliceorg(
-        kind="noise",
-        window="post",
-        min_pairs=0,
-        weight_by_trials=False,
-    )
+    for window in WINDOWS_TO_PLOT:
+        main_visual_corr_sliceorg(
+            kind="noise",
+            window=window,
+            min_pairs=0,
+        )
+
+# %%

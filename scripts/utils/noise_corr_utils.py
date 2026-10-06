@@ -81,7 +81,6 @@ def compute_noise_corr_by_condition_average(
     per_condition_results = []
     unique_conds = np.unique(cond_labels)
 
-            # 累计原始计数（用于 FR）
     for c in unique_conds:
         idx = np.where(cond_labels == c)[0]
         if idx.size < min_trials_per_cond:
@@ -93,7 +92,7 @@ def compute_noise_corr_by_condition_average(
         if Xc.shape[0] < 2 or Xc.shape[1] < 2:
             continue
 
-        firing_rates = (Xc.mean(axis=0, keepdims=True) / (t1 - t0)).ravel() 
+        firing_rates = (Xc.mean(axis=0, keepdims=True) / (t1 - t0)).ravel()
 
         # Compute pairwise r within this condition
         iu, ju = np.triu_indices(Xc.shape[1], k=1)
@@ -176,7 +175,6 @@ def compute_noise_corr_pooled_withincond_zscore(
         ws = event_onsets[idx] + t0
         we = event_onsets[idx] + t1
         Xc, clu_ids = counts_matrix_direct(spike_t, spike_clu, cluster_ids, ws, we)
-        # 累计原始计数（用于 FR）
         if sum_counts is None:
             sum_counts = Xc.sum(axis=0, keepdims=False)
         else:
@@ -195,7 +193,7 @@ def compute_noise_corr_pooled_withincond_zscore(
     X = np.vstack(X_list)
     if X.shape[0] < min_trials_total or X.shape[1] < 2:
         return pd.DataFrame()
-    
+
     firing_rates = (sum_counts / n_trials_total) / (t1 - t0)   # shape: (n_clusters,)
 
     iu, ju = np.triu_indices(X.shape[1], k=1)
@@ -231,7 +229,7 @@ def compute_noise_corr_pooled_withincond_zscore(
     return df
 
 
-# ---------- Signal correlation (for next step) ----------
+# ---------- Signal correlation  ----------
 def compute_signal_corr_by_condition_means(
     spike_t, spike_clu, cluster_ids, depth_map,
     trial_onsets, cond_labels, t0, t1,
@@ -255,8 +253,8 @@ def compute_signal_corr_by_condition_means(
     # Collect per-condition means for each neuron
     tuning_list = []
     kept_conds = []
-    sum_counts = None              # ← 新增：累计总计数
-    n_trials_total = 0             # ← 新增：累计总 trial 数
+    sum_counts = None
+    n_trials_total = 0
     clu_ids = None
 
     for c in unique_conds:
@@ -269,7 +267,6 @@ def compute_signal_corr_by_condition_means(
         tuning_list.append(Xc.mean(axis=0))  # mean over trials (per neuron)
         kept_conds.append(c)
 
-        # ← 新增：与第一个函数同样的累计逻辑
         sc = Xc.sum(axis=0, keepdims=False)
         if sum_counts is None:
             sum_counts = sc.astype(float, copy=False)
@@ -293,17 +290,15 @@ def compute_signal_corr_by_condition_means(
     for k, (a, b) in enumerate(zip(iu, ju)):
         r_sig[k] = np.corrcoef(tuning[:, a], tuning[:, b])[0, 1]
 
-    # ← 新增：计算 per-neuron 平均 FR（Hz）
     dur = (t1 - t0)
     firing_rates = (sum_counts / max(n_trials_total, 1)) / max(dur, eps)
 
-    # depths = cluster_depths.to_numpy()    
+    # depths = cluster_depths.to_numpy()
     depths = depth_map.reindex(clu_ids).to_numpy()
 
     df = pd.DataFrame({
         "cluster_id1": clu_ids[iu],
         "cluster_id2": clu_ids[ju],
-        # ← 可选：把 FR 一并放进来，便于后续分析/分层
         "cluster_id1_fr": firing_rates[iu],
         "cluster_id2_fr": firing_rates[ju],
         "cluster_geo_mean_fr": np.sqrt(firing_rates[iu] * firing_rates[ju]),
@@ -314,11 +309,6 @@ def compute_signal_corr_by_condition_means(
     })
     return df
 
-
-# def combine_corr_results(df_noise, df_signal):
-#     common_cols = [ "session_pid", "cluster_id1", "cluster_id2"]
-#     merged = pd.merge(df_noise, df_signal, on=common_cols, how="inner", suffixes=("_noise", "_signal"))
-#     return merged
 
 def combine_corr_results(df_noise, df_signal):
     common_cols = [

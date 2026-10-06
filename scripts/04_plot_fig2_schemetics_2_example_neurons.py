@@ -1,7 +1,9 @@
 """
-plot panel bcd for paper figure1 
-illustrating the pairwise correlation calculation
-
+Main figure 2bcd:
+Pick 2 example neurons from the same session and illustrate the noise correlation and signal correlation calculation.
+- b: tuning-like curves for the two neurons across signed contrast conditions
+- c: noise correlation within the highest contrast condition
+- d: signal correlation across condition means
 """
 #%%
 import os
@@ -37,9 +39,9 @@ CORR_COLORS = {
 
 
 def clean_rt_table(trials_table, rt_variable):
-    
+
     trials_table['rt_raw'] = trials_table[rt_variable].copy()
-    trials_table['rt'] = clean_rts(trials_table[rt_variable], cutoff=C.RT_CUTOFF)    
+    trials_table['rt'] = clean_rts(trials_table[rt_variable], cutoff=C.RT_CUTOFF)
     return trials_table
 
 
@@ -227,7 +229,7 @@ def plot_example_noise_signal_pair(
     ax.scatter(
         tune["neuron1_spikes"],
         tune["neuron2_spikes"],
-        s=15, linewidths=0, #alpha=0.9, 
+        s=15, linewidths=0, #alpha=0.9,
         c=tune["point_color"]
     )
 
@@ -276,7 +278,7 @@ trials_table_example_session = trials_table_example_session[trials_table_example
 trials_table_example_session = trials_table_example_session.head(400).reset_index(drop=True)
 trials_table_example_session = clean_rt_table(trials_table_example_session, C.RT_VARIABLE_NAME)
 trials_table_example_session = trials_table_example_session[~trials_table_example_session['rt'].isna()]
-    
+
 #load spikes and clusters for the example session
 sl = SpikeSortingLoader(one=one, pid=example_pid)
 spikes, clusters, channels = sl.load_spike_sorting(revision='2024-05-06', good_units=True)
@@ -295,9 +297,7 @@ counts_df = make_example_pair_trial_table(
 
 fig = plot_example_noise_signal_pair(
     counts_df,
-    # pair_info=example.to_dict(),
     example_cond=100,
     save=True,
     fname=C.FIGPATH / "example_pair_noise_signal_schematic_9colors.pdf",
 )
-

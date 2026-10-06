@@ -22,7 +22,7 @@ from scripts.utils.io import read_table
 
 NC_WINDOWS = C.NC_WINDOWS_500
 RUN_TAG = NC_WINDOWS["pre"]["subfoldername"].removeprefix("pair_corr_pre_")
-DATA_FILE = (C.DATAPATH / f"proj2_noise_pair_corr_merged_prepost_{RUN_TAG}.parquet")
+DATA_FILE = (C.DATAPATH / f"noise_pair_corr_merged_prepost_{RUN_TAG}.parquet")
 RANDOM_FACTORS = ["session_eid"]
 ANALYSES = ["pre", "post", "quench"]
 COVARIATES = ["n_trials", "cluster_geo_mean_fr", "pair_distance"]
@@ -264,11 +264,11 @@ slope_results = []
 random_tag = "_and_".join(RANDOM_FACTORS)
 comparison_file = (
     C.RESULTSPATH
-    / f"proj2_noise_three_model_AIC_BIC_{RUN_TAG}_{random_tag}.csv"
+    / f"noise_three_model_AIC_BIC_{RUN_TAG}_{random_tag}.csv"
 )
 slope_file = (
     C.RESULTSPATH
-    / f"proj2_noise_regional_slopes_BH_FDR_{RUN_TAG}_{random_tag}.csv"
+    / f"noise_regional_slopes_BH_FDR_{RUN_TAG}_{random_tag}.csv"
 )
 
 for random_factor in RANDOM_FACTORS:

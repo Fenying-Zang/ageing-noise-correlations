@@ -1,10 +1,11 @@
 """
-plot swanson figs to show regional specificity of age effects on r_noise and r_signal
+Figure 3c: Swanson maps of regional LMM slopes for r_noise and delta_r_noise.
+The slopes are for the effect of age on r_noise or delta_r_noise
 
 """
 #%%
+import config as C
 import pandas as pd
-import numpy as np
 import os
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
@@ -12,8 +13,9 @@ from iblatlas.plots import plot_swanson_vector
 from iblatlas.atlas import BrainRegions
 from scripts.utils.plot_utils import figure_style
 from scripts.utils.io import read_table
-import config as C
-ANALYSIS_TAG = "_VISp_VISpm_separate"
+
+WINDOW_LEN = 500
+REGIONAL_STATS_FILE = C.RESULTSPATH / f"noise_regional_slopes_BH_FDR_{WINDOW_LEN}ms_{C.RANDOM_FACTOR}.csv"
 
 br = BrainRegions()
 
@@ -37,45 +39,75 @@ def region_table(beryl_names):
     return ROI_df
 
 
-def load_stats_results(y_col, n_permut=C.N_PERMUT_NEURAL_REGIONAL, window="pre"):
+def load_stats_results(y_col, window="pre"):
     """
-    Load current-format regional permutation results.
+    Load regional LMM age slopes.
 
-    Current input format:
-    proj2_noise_pairlevel_regional_permutation_{analysis_name}_{n_permut}perms_500ms{ANALYSIS_TAG}.csv
+    r_noise:
+        analysis = pre / post
+    delta_r_noise:
+        analysis = quench
 
-    analysis_name:
-    - pre/post for r_noise
-    - quench for delta_r_noise
+    beta_age is the reported slope for age_years.
     """
-
     if y_col == "delta_r_noise":
         analysis_name = "quench"
     elif y_col == "r_noise":
         if window not in ["pre", "post"]:
-            raise ValueError("For r_noise, window must be 'pre' or 'post'.")
+            raise ValueError(
+                "For r_noise, window must be 'pre' or 'post'."
+            )
         analysis_name = window
     else:
         raise ValueError(
             f"Unsupported y_col: {y_col}. "
-            "This loader currently supports r_noise and delta_r_noise only."
+            "Supported metrics: r_noise and delta_r_noise."
         )
 
-    fname = (
-        f"proj2_noise_pairlevel_regional_permutation_"
-        f"{analysis_name}_{n_permut}perms_500ms{ANALYSIS_TAG}.csv"
-    )
+    if not REGIONAL_STATS_FILE.exists():
+        raise FileNotFoundError(
+            f"Stats file not found: {REGIONAL_STATS_FILE}"
+        )
 
-    path = C.RESULTSPATH / fname
+    stats_df = read_table(REGIONAL_STATS_FILE)
 
-    if not path.exists():
-        raise FileNotFoundError(f"Stats file not found: {path}")
+    required = [
+        "analysis",
+        "random_factor",
+        "cluster_region",
+        "beta_age",
+        "p_BH_FDR",
+    ]
+    missing = [col for col in required if col not in stats_df.columns]
+    if missing:
+        raise ValueError(f"Missing statistics columns: {missing}")
 
-    stats_df = read_table(path)
+    stats_df = stats_df.loc[
+        (stats_df["analysis"] == analysis_name)
+        & (stats_df["random_factor"] == C.RANDOM_FACTOR),
+        required,
+    ].copy()
 
-    print(f"[Loaded stats] {path}")
+    if stats_df.empty:
+        raise ValueError(
+            f"No regional statistics for analysis='{analysis_name}', "
+            f"random_factor='{C.RANDOM_FACTOR}'."
+        )
+
+    # Each region must have exactly one slope for this analysis/model.
+    duplicates = stats_df.loc[
+        stats_df["cluster_region"].duplicated(keep=False),
+        "cluster_region",
+    ].unique()
+
+    if len(duplicates):
+        raise ValueError(
+            f"Duplicate regional statistics: {duplicates.tolist()}"
+        )
+
+    print(f"Loaded regional LMM slopes: {REGIONAL_STATS_FILE}")
     print(stats_df.shape)
-    print(stats_df[["analysis", "cluster_region", "y_col", "observed_val", "p_perm"]].head())
+    print(stats_df.head())
 
     return stats_df
 
@@ -101,23 +133,32 @@ def plot_swanson(metric, ROI_df, stats_df, window="pre"):
         )
 
     merged_df = ROI_df.merge(
-        stats_df[['cluster_region', 'observed_val', 'p_perm']],
-        left_on='ROI', right_on='cluster_region', how='left'
+        stats_df[["cluster_region", "beta_age", "p_BH_FDR"]],
+        left_on="ROI",
+        right_on="cluster_region",
+        how="left",
+        validate="many_to_one",
     )
 
     vmin, vmax = get_vmin_vmax(metric)
     figure_style()
-
     fig, ax = plt.subplots(figsize=(2.5, 2))
 
     plot_swanson_vector(
-        merged_df['beryl_name'], merged_df['observed_val'],
-        cmap=cmap, vmin=vmin, vmax=vmax, br=br,
-        empty_color='white', show_cbar=True, annotate=False,  
-        annotate_list=merged_df['swanson_name'],  ax=ax,
-
+        merged_df["beryl_name"],
+        merged_df["beta_age"],
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        br=br,
+        empty_color="white",
+        show_cbar=True,
+        annotate=False,
+        annotate_list=merged_df["swanson_name"],
+        ax=ax,
     )
 
+    # 1. make outlines thinner + lighter
     for coll in ax.collections:
         try:
             coll.set_linewidth(0.2)
@@ -185,31 +226,53 @@ def plot_swanson(metric, ROI_df, stats_df, window="pre"):
 
 
     ax.set_axis_off()
-    if metric == 'delta_r_noise':
-        fname = f"Swanson_{metric}_500ms{ANALYSIS_TAG}.pdf"
-    else:
-        fname = f"Swanson_{metric}_{window}_500ms{ANALYSIS_TAG}.pdf"
-    fig.savefig(os.path.join(C.FIGPATH, fname), dpi=300)
-    print(f"[Saved figure] {os.path.join(C.FIGPATH, fname)}")
+    analysis_name = "quench" if metric == "delta_r_noise" else window
+
+    fname = (
+        f"Swanson_{metric}_{analysis_name}_"
+        f"{WINDOW_LEN}ms_LMM_{C.RANDOM_FACTOR}.pdf"
+    )
+
+    os.makedirs(C.FIGPATH, exist_ok=True)
+    save_path = os.path.join(C.FIGPATH, fname)
+
+    fig.savefig(save_path, dpi=300)
+    print(f"Saved figure: {save_path}")
+
+    return fig, ax
 
 
 def main():
+    selected_metrics = ["r_noise", "delta_r_noise"]
 
-    # selected_metrics = ['r_noise']
-    selected_metrics = ['delta_r_noise']
     ROI_df = region_table(C.BERYL_NAMES)
 
     for metric in selected_metrics:
-        if metric in ['r_signal', 'r_noise']:
-            for time_window in ['pre', 'post']:
-                print(f"Plotting Swanson for {metric} ({time_window}-window)...")
-                stats_df = load_stats_results(metric, window=time_window) 
-                plot_swanson(metric, ROI_df, stats_df, window=time_window)
-        else:
-            print(f"Plotting Swanson for {metric}...")
-            stats_df = load_stats_results(metric) 
+        if metric == "r_noise":
+            for time_window in ["pre", "post"]:
+                print(
+                    f"Plotting Swanson for {metric} "
+                    f"({time_window}-window)..."
+                )
+                stats_df = load_stats_results(
+                    metric,
+                    window=time_window,
+                )
+                plot_swanson(
+                    metric,
+                    ROI_df,
+                    stats_df,
+                    window=time_window,
+                )
+
+        elif metric == "delta_r_noise":
+            print(f"Plotting Swanson for {metric} (quench)...")
+            stats_df = load_stats_results(metric)
             plot_swanson(metric, ROI_df, stats_df)
+
+        else:
+            raise ValueError(f"Unsupported metric: {metric}")
+
 
 if __name__ == "__main__":
     main()
-

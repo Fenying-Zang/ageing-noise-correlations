@@ -18,7 +18,7 @@ from scripts.utils.io import read_table
 
 NC_WINDOWS = C.NC_WINDOWS_500
 RUN_TAG = NC_WINDOWS["pre"]["subfoldername"].removeprefix("pair_corr_pre_")
-DATA_FILE = (C.DATAPATH / f"proj2_noise_pair_corr_merged_prepost_{RUN_TAG}.parquet")
+DATA_FILE = (C.DATAPATH / f"noise_pair_corr_merged_prepost_{RUN_TAG}.parquet")
 VALIDATION_WINDOWS = ["post"]
 RANDOM_FACTORS = ["session_eid"]
 PREDICTORS_BY_METRIC = { "r_noise": ["pair_distance", "cluster_geo_mean_fr", "r_signal"],
@@ -229,12 +229,12 @@ window_tag = "_".join(VALIDATION_WINDOWS)
 
 comparison_file = (
     C.RESULTSPATH
-    / "proj2_noise_validation_three_model_AIC_BIC_"
+    / "noise_validation_three_model_AIC_BIC_"
       f"{window_tag}_{RUN_TAG}_{random_tag}.csv"
 )
 slope_file = (
     C.RESULTSPATH
-    / "proj2_noise_validation_regional_slopes_BH_FDR_"
+    / "noise_validation_regional_slopes_BH_FDR_"
       f"{window_tag}_{RUN_TAG}_{random_tag}.csv"
 )
 
