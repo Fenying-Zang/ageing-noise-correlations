@@ -252,43 +252,8 @@ def enrich_df_new(conditionsplit=False, k=None, id=None, ff=None, fr=None, time_
 
     return df_curr
 
-# def combine_regions(regions):
-#     """
-#     Combine all layers of cortex and the dentate gyrus molecular and granular layer
-#     Combine VISa and VISam into PPC
-#     """
-#     remove = ['1', '2', '3', '4', '5', '6a', '6b', '/']
-#     for i, region in enumerate(regions):
-#         # print(region)
-#         # if region[:2] == 'CA':
-#         #     continue
 
-#         # for j, char in enumerate(remove):
-#         #     regions[i] = regions[i].replace(char, '')
-#         if (regions[i] == 'VISa') | (regions[i] == 'VISam'):
-#             regions[i] = 'PPC'
-#         if (regions[i] == 'VISp') | (regions[i] == 'VISpm'):
-#             regions[i] = 'VISp+pm'
-#         if (region == 'DG-mo') or (region == 'DG-sg') or (region == 'DG-po'):
-#             regions[i] = 'DG'
-#         if (region == 'APN') or (region == 'MRN'):
-#             regions[i] = 'MBm'
-
-#         if (region == 'ACAv') or (region == 'ACAd'):
-#             regions[i] = 'ACA'
-#         if (region == 'PL') or (region == 'ILA'):
-#             regions[i] = 'mPFC'
-#         if (region == 'ORBm') or (region == 'ORBl') or (region == 'ORBvl'):
-#             regions[i] = 'ORB'
-
-#         if (region == 'TTd') or (region == 'DP') or (region == 'AON'):
-#             regions[i] = 'OLF'
-#         if (region == 'LSr') or (region == 'LSc') or (region == 'LSv'):
-#             regions[i] = 'LS'
-
-#     return regions
-
-def combine_regions(regions):
+def combine_regions_visp_seperate(regions):
     """
     Map fine-grained brain region acronyms into broader groups.
 

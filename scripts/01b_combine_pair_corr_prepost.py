@@ -1,11 +1,14 @@
 #%%
-import os
 from glob import glob
 from pathlib import Path
 import pandas as pd
 import config as C
 from scripts.utils.io import read_table
 from scripts.utils.noise_corr_utils import combine_corr_results
+
+# Select the window configuration: C.NC_WINDOWS_500 or C.NC_WINDOWS_1000
+NC_WINDOWS = C.NC_WINDOWS_1000
+RUN_TAG = NC_WINDOWS["pre"]["subfoldername"].removeprefix("pair_corr_pre_")
 
 def combine_pair_tables(kind, subfoldername):
     files = sorted(glob(str(C.RESULTSPATH / subfoldername / f"pair_{kind}_*.parquet")))
@@ -126,7 +129,7 @@ def main():
     coverage_records = []
     merged_tables = []
 
-    for window_name, window_cfg in C.NC_WINDOWS.items():
+    for window_name, window_cfg in NC_WINDOWS.items():
         subfoldername = window_cfg["subfoldername"]
 
         coverage_records.append(check_pair_file_coverage("noise", subfoldername))
@@ -138,7 +141,7 @@ def main():
 
     if coverage_records:
         coverage_summary = pd.DataFrame(coverage_records)
-        out_coverage = C.DATAPATH / "proj2_noise_pair_corr_file_coverage_prepost.csv"
+        out_coverage = C.DATAPATH / f"proj2_noise_pair_corr_file_coverage_prepost_{RUN_TAG}.csv"
 
 
         coverage_summary.to_csv(out_coverage, index=False)
@@ -146,7 +149,7 @@ def main():
 
     if merged_tables:
         merged_prepost = pd.concat(merged_tables, ignore_index=True)
-        out_prepost = C.DATAPATH / "proj2_noise_pair_corr_merged_prepost_500ms.parquet"
+        out_prepost = C.DATAPATH / f"proj2_noise_pair_corr_merged_prepost_{RUN_TAG}.parquet"
         merged_prepost.to_parquet(out_prepost, index=False)
 
         print(f"[Saved prepost merged] {out_prepost}")
